@@ -45,3 +45,6 @@ The project operates through a Streamlit web application that takes a PDF as inp
 # The deployed app can be used [here](https://bilingual-cat-tool.streamlit.app/)
 
 ![image](https://github.com/user-attachments/assets/260cf2eb-4192-4162-a304-b2ca4e4e2ca8)
+
+![image](https://github.com/user-attachments/assets/c008a4c4-0744-4052-b08f-87f17ffb46da)
+

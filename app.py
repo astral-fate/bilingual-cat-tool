@@ -1,26 +1,24 @@
-from flask import Flask, request, redirect, url_for, send_file, render_template
-from werkzeug.utils import secure_filename
+import streamlit as st
 import fitz  # PyMuPDF
 import pandas as pd
 from docx import Document
 import os
+import io
 
 UPLOAD_FOLDER = 'uploads'
 PROCESSED_FOLDER = 'processed'
 ALLOWED_EXTENSIONS = {'pdf'}
 
-app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-app.config['PROCESSED_FOLDER'] = PROCESSED_FOLDER
-
+# Create directories if they don't exist
 if not os.path.exists(UPLOAD_FOLDER):
     os.makedirs(UPLOAD_FOLDER)
-
 if not os.path.exists(PROCESSED_FOLDER):
     os.makedirs(PROCESSED_FOLDER)
 
+
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
 
 def extract_text_from_pdf(pdf_path):
     document = fitz.open(pdf_path)
@@ -30,6 +28,7 @@ def extract_text_from_pdf(pdf_path):
         text += page.get_text()
     return text
 
+
 def preprocess_text(text):
     text = text.replace('-\n', '')
     text = text.replace('\n', ' ')
@@ -38,12 +37,14 @@ def preprocess_text(text):
         text = text.replace(abbr, abbr.replace('.', '[dot]'))
     return text
 
+
 def create_dataframe_from_text(text):
     sentences = text.split('. ')
     sentences = [sentence.replace('[dot]', '.') for sentence in sentences]
     data = {'Sentence': sentences, 'Translation': [''] * len(sentences)}
     df = pd.DataFrame(data)
     return df
+
 
 def save_to_word(df, output_path):
     doc = Document()
@@ -56,37 +57,42 @@ def save_to_word(df, output_path):
         row_cells = table.add_row().cells
         row_cells[0].text = row['Sentence']
         row_cells[1].text = row['Translation']
-    
+
     doc.save(output_path)
 
-@app.route('/', methods=['GET', 'POST'])
-def upload_file():
-    if request.method == 'POST':
-        if 'file' not in request.files:
-            return redirect(request.url)
-        file = request.files['file']
-        if file.filename == '':
-            return redirect(request.url)
-        if file and allowed_file(file.filename):
-            filename = secure_filename(file.filename)
-            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(file_path)
-            
-            # Process the file
-            text = extract_text_from_pdf(file_path)
-            processed_text = preprocess_text(text)
-            df = create_dataframe_from_text(processed_text)
-            output_filename = filename.rsplit('.', 1)[0] + '_processed.docx'
-            output_path = os.path.join(app.config['PROCESSED_FOLDER'], output_filename)
-            save_to_word(df, output_path)
-            
-            return redirect(url_for('download_file', filename=output_filename))
-    
-    return render_template('upload.html')
 
-@app.route('/download/<filename>')
-def download_file(filename):
-    return send_file(os.path.join(app.config['PROCESSED_FOLDER'], filename), as_attachment=True)
+def main():
+    st.title("PDF to Bilingual Word Converter")
 
-if __name__ == '__main__':
-    app.run(debug=True)
+    uploaded_file = st.file_uploader("Upload a PDF file", type=["pdf"])
+
+    if uploaded_file is not None:
+        
+        # Save the uploaded file to the upload folder
+        file_path = os.path.join(UPLOAD_FOLDER, uploaded_file.name)
+        with open(file_path, "wb") as f:
+          f.write(uploaded_file.read())
+
+        # Process the file
+        text = extract_text_from_pdf(file_path)
+        processed_text = preprocess_text(text)
+        df = create_dataframe_from_text(processed_text)
+        output_filename = uploaded_file.name.rsplit('.', 1)[0] + '_processed.docx'
+        output_path = os.path.join(PROCESSED_FOLDER, output_filename)
+        save_to_word(df, output_path)
+
+        # Download the file
+        with open(output_path, 'rb') as f:
+            file_data = f.read()
+        
+        st.download_button(
+            label="Download Processed Word File",
+            data=file_data,
+            file_name=output_filename,
+            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        )
+        
+        st.success("File processed and available for download!")
+
+if __name__ == "__main__":
+    main()
